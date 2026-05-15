@@ -5,13 +5,18 @@
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
-        android:label="Auto Focus"
+        android:label="Auto DND"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Replace with your real AdMob app ID before publishing. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -41,7 +46,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="foreground_app_monitoring_for_focus_mode_shortcuts" />
+                android:value="foreground_app_monitoring_for_dnd_automation" />
         </service>
         <receiver
             android:name=".BootReceiver"

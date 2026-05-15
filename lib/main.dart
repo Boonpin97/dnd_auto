@@ -2,19 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 void main() {
-  runApp(const AutoFocusApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  unawaited(MobileAds.instance.initialize());
+  runApp(const AutoDndApp());
 }
 
-class AutoFocusApp extends StatelessWidget {
-  const AutoFocusApp({super.key});
+class AutoDndApp extends StatelessWidget {
+  const AutoDndApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     const seed = Color(0xFF0F766E);
     return MaterialApp(
-      title: 'Auto Focus',
+      title: 'Auto DND',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: ThemeData(
@@ -43,7 +46,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final NativeBridge _bridge = NativeBridge();
   Timer? _refreshTimer;
+  BannerAd? _bannerAd;
   AppStatus? _status;
+  bool _bannerLoaded = false;
+  bool _loadingBanner = false;
   bool _loading = true;
   bool _changingService = false;
   String? _error;
@@ -52,6 +58,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     unawaited(_loadStatus());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadBannerAd());
+    });
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 2),
       (_) => unawaited(_loadStatus(silent: true)),
@@ -61,7 +70,51 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _bannerAd?.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadBannerAd() async {
+    if (_loadingBanner || _bannerAd != null || !mounted) {
+      return;
+    }
+
+    _loadingBanner = true;
+    final width = MediaQuery.sizeOf(context).width.truncate();
+    final adaptiveSize = width > 0
+        ? await AdSize.getLargeAnchoredAdaptiveBannerAdSize(width)
+        : null;
+    final adSize = adaptiveSize ?? AdSize.banner;
+    final banner = BannerAd(
+      size: adSize,
+      adUnitId: AdConfig.bannerAdUnitId,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+          setState(() {
+            _bannerLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _bannerAd = null;
+            _bannerLoaded = false;
+          });
+        },
+      ),
+    );
+
+    _bannerAd = banner;
+    _loadingBanner = false;
+    unawaited(banner.load());
   }
 
   Future<void> _loadStatus({bool silent = false}) async {
@@ -151,7 +204,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Auto Focus')),
+      appBar: AppBar(title: const Text('Auto DND')),
+      bottomNavigationBar: _bannerAd != null && _bannerLoaded
+          ? SafeArea(
+              top: false,
+              child: SizedBox(
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            )
+          : null,
       body: _loading && _status == null
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -199,8 +262,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 8),
                           Text(
                             _status!.serviceEnabled
-                                ? 'Foreground monitoring is active. Open Focus Mode '
-                                      'when a trigger app is active.'
+                                ? 'Foreground monitoring is active. DND will enable automatically while media audio stays allowed.'
                                 : 'Monitoring is stopped.',
                           ),
                         ],
@@ -280,6 +342,17 @@ class PermissionCard extends StatelessWidget {
             await onChanged();
           },
         ),
+      if (!status.hasNotificationPolicyAccess)
+        PermissionAction(
+          title: 'Do Not Disturb access',
+          description:
+              'Required to enable and disable DND automatically while preserving media playback.',
+          buttonText: 'Grant DND access',
+          onPressed: () async {
+            await bridge.openDndAccessSettings();
+            await onChanged();
+          },
+        ),
     ];
 
     return Card(
@@ -298,21 +371,11 @@ class PermissionCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               missing.isEmpty
-                  ? 'Usage access is granted. Focus Mode must be toggled from Android settings.'
-                  : 'Grant usage access before starting the monitoring service.',
+                  ? 'Usage access and DND access are granted. Auto DND uses priority mode so media can keep playing.'
+                  : 'Grant both permissions before starting the monitoring service.',
             ),
             const SizedBox(height: 12),
             ...missing,
-            PermissionAction(
-              title: 'Focus Mode settings',
-              description:
-                  'Android does not expose a public API for apps to toggle Digital Wellbeing Focus Mode.',
-              buttonText: 'Open Focus Mode',
-              onPressed: () async {
-                await bridge.openFocusModeSettings();
-                await onChanged();
-              },
-            ),
             PermissionAction(
               title: 'Battery optimization',
               description:
@@ -376,9 +439,7 @@ class StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = status.focusModeSuggested
-        ? Colors.orange
-        : Colors.green;
+    final statusColor = status.dndEnabled ? Colors.red : Colors.green;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -393,11 +454,7 @@ class StatusCard extends StatelessWidget {
               children: [
                 Chip(
                   avatar: CircleAvatar(backgroundColor: statusColor),
-                  label: Text(
-                    status.focusModeSuggested
-                        ? 'Focus Mode recommended'
-                        : 'No trigger active',
-                  ),
+                  label: Text(status.dndEnabled ? 'DND on' : 'DND off'),
                 ),
                 Chip(
                   label: Text(
@@ -418,10 +475,10 @@ class StatusCard extends StatelessWidget {
             Text('Foreground app: ${status.foregroundAppName ?? 'Unknown'}'),
             const SizedBox(height: 4),
             Text('Package: ${status.foregroundPackageName ?? 'Unavailable'}'),
-            if (status.focusModeSuggested) ...[
+            if (status.dndEnabledByUs) ...[
               const SizedBox(height: 4),
               const Text(
-                'Open Focus Mode from Android settings to pause distracting apps.',
+                'Auto DND enabled priority mode. Media audio should continue playing.',
               ),
             ],
           ],
@@ -600,9 +657,10 @@ class InstalledApp {
 class AppStatus {
   const AppStatus({
     required this.hasUsageAccess,
-    required this.hasFocusModeShortcut,
+    required this.hasNotificationPolicyAccess,
     required this.serviceEnabled,
-    required this.focusModeSuggested,
+    required this.dndEnabled,
+    required this.dndEnabledByUs,
     required this.selectedApps,
     required this.foregroundPackageName,
     required this.foregroundAppName,
@@ -610,9 +668,10 @@ class AppStatus {
   });
 
   final bool hasUsageAccess;
-  final bool hasFocusModeShortcut;
+  final bool hasNotificationPolicyAccess;
   final bool serviceEnabled;
-  final bool focusModeSuggested;
+  final bool dndEnabled;
+  final bool dndEnabledByUs;
   final List<InstalledApp> selectedApps;
   final String? foregroundPackageName;
   final String? foregroundAppName;
@@ -621,9 +680,11 @@ class AppStatus {
   factory AppStatus.fromMap(Map<Object?, Object?> map) {
     return AppStatus(
       hasUsageAccess: map['hasUsageAccess'] as bool? ?? false,
-      hasFocusModeShortcut: map['hasFocusModeShortcut'] as bool? ?? false,
+      hasNotificationPolicyAccess:
+          map['hasNotificationPolicyAccess'] as bool? ?? false,
       serviceEnabled: map['serviceEnabled'] as bool? ?? false,
-      focusModeSuggested: map['focusModeSuggested'] as bool? ?? false,
+      dndEnabled: map['dndEnabled'] as bool? ?? false,
+      dndEnabledByUs: map['dndEnabledByUs'] as bool? ?? false,
       selectedApps: ((map['selectedApps'] as List<Object?>?) ?? const [])
           .whereType<Map<Object?, Object?>>()
           .map(InstalledApp.fromMap)
@@ -675,11 +736,16 @@ class NativeBridge {
     return _channel.invokeMethod('openUsageAccessSettings');
   }
 
-  Future<void> openFocusModeSettings() {
-    return _channel.invokeMethod('openFocusModeSettings');
+  Future<void> openDndAccessSettings() {
+    return _channel.invokeMethod('openDndAccessSettings');
   }
 
   Future<void> openBatteryOptimizationSettings() {
     return _channel.invokeMethod('openBatteryOptimizationSettings');
   }
+}
+
+class AdConfig {
+  // Google-provided Android test ad unit. Replace before publishing.
+  static const bannerAdUnitId = 'ca-app-pub-3940256099942544/9214589741';
 }

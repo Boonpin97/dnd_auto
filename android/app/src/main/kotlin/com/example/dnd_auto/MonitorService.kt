@@ -3,7 +3,6 @@ package com.example.dnd_auto
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -17,7 +16,7 @@ import androidx.core.app.NotificationCompat
 class MonitorService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var prefsManager: PrefsManager
-    private lateinit var focusModeManager: FocusModeManager
+    private lateinit var dndManager: DndManager
     private lateinit var appRepository: AppRepository
 
     private val pollTask = object : Runnable {
@@ -30,7 +29,7 @@ class MonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefsManager = PrefsManager(this)
-        focusModeManager = FocusModeManager(this)
+        dndManager = DndManager(this)
         appRepository = AppRepository(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Monitoring foreground app..."))
@@ -52,10 +51,20 @@ class MonitorService : Service() {
 
     private fun performMonitoringTick() {
         val hasUsageAccess = PermissionUtils.hasUsageAccess(this)
+        val hasPolicyAccess = PermissionUtils.hasNotificationPolicyAccess(this)
 
-        if (!hasUsageAccess) {
-            prefsManager.setPausedReason("Usage access missing")
-            prefsManager.setFocusModeSuggested(false)
+        if (!hasUsageAccess || !hasPolicyAccess) {
+            prefsManager.setPausedReason(
+                buildString {
+                    if (!hasUsageAccess) append("Usage access missing")
+                    if (!hasUsageAccess && !hasPolicyAccess) append(" / ")
+                    if (!hasPolicyAccess) append("DND access missing")
+                },
+            )
+            if (prefsManager.isDndEnabledByUs() && hasPolicyAccess) {
+                dndManager.disableDnd()
+                prefsManager.setDndEnabledByUs(false)
+            }
             updateNotification("Monitoring paused: ${prefsManager.getPausedReason()}")
             return
         }
@@ -72,12 +81,18 @@ class MonitorService : Service() {
         prefsManager.setLastForegroundPackage(foregroundApp)
 
         if (foregroundApp != null && selectedApps.contains(foregroundApp)) {
-            prefsManager.setFocusModeSuggested(true)
-            updateNotification("Focus Mode recommended for ${appRepository.getAppInfo(foregroundApp)?.appName ?: foregroundApp}")
+            if (!dndManager.isDndEnabled()) {
+                dndManager.enableDndAllowingMedia()
+                prefsManager.setDndEnabledByUs(true)
+            }
+            updateNotification("DND enabled for ${appRepository.getAppInfo(foregroundApp)?.appName ?: foregroundApp}")
             return
         }
 
-        prefsManager.setFocusModeSuggested(false)
+        if (prefsManager.isDndEnabledByUs()) {
+            dndManager.disableDnd()
+            prefsManager.setDndEnabledByUs(false)
+        }
 
         updateNotification(
             foregroundApp?.let {
@@ -104,27 +119,19 @@ class MonitorService : Service() {
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Auto Focus Monitoring",
+            "Auto DND Monitoring",
             NotificationManager.IMPORTANCE_LOW,
         )
-        channel.description = "Foreground app monitoring for Auto Focus"
+        channel.description = "Foreground app monitoring for Auto DND"
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
     }
 
     private fun buildNotification(contentText: String): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            focusModeManager.buildFocusModeSettingsIntent(),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Auto Focus Active")
+            .setContentTitle("Auto DND Active")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_auto_dnd_stat)
-            .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
@@ -136,7 +143,7 @@ class MonitorService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "auto_focus_monitor"
+        private const val CHANNEL_ID = "auto_dnd_monitor"
         private const val NOTIFICATION_ID = 1001
         private const val POLL_INTERVAL_MS = 1_000L
 

@@ -1,6 +1,7 @@
 package com.example.dnd_auto
 
 import android.app.AppOpsManager
+import android.app.NotificationManager
 import android.content.Context
 
 object PermissionUtils {
@@ -12,5 +13,10 @@ object PermissionUtils {
             context.packageName,
         )
         return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    fun hasNotificationPolicyAccess(context: Context): Boolean {
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        return notificationManager.isNotificationPolicyAccessGranted
     }
 }
