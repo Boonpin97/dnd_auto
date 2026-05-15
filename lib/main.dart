@@ -4,17 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 void main() {
-  runApp(const AutoDndApp());
+  runApp(const AutoFocusApp());
 }
 
-class AutoDndApp extends StatelessWidget {
-  const AutoDndApp({super.key});
+class AutoFocusApp extends StatelessWidget {
+  const AutoFocusApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     const seed = Color(0xFF0F766E);
     return MaterialApp(
-      title: 'Auto DND',
+      title: 'Auto Focus',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: ThemeData(
@@ -102,7 +102,9 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => AppPickerScreen(
           bridge: _bridge,
-          initiallySelected: status.selectedApps.map((app) => app.packageName).toSet(),
+          initiallySelected: status.selectedApps
+              .map((app) => app.packageName)
+              .toSet(),
         ),
       ),
     );
@@ -149,99 +151,104 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Auto DND'),
-      ),
+      appBar: AppBar(title: const Text('Auto Focus')),
       body: _loading && _status == null
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_error!, style: theme.textTheme.bodyLarge),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_error!, style: theme.textTheme.bodyLarge),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadStatus,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  PermissionCard(
+                    status: _status!,
+                    bridge: _bridge,
+                    onChanged: _loadStatus,
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadStatus,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      PermissionCard(status: _status!, bridge: _bridge, onChanged: _loadStatus),
-                      const SizedBox(height: 16),
-                      StatusCard(status: _status!),
-                      const SizedBox(height: 16),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 16),
+                  StatusCard(status: _status!),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Monitoring service',
-                                      style: theme.textTheme.titleMedium,
-                                    ),
-                                  ),
-                                  Switch(
-                                    value: _status!.serviceEnabled,
-                                    onChanged: _changingService ? null : _toggleService,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _status!.serviceEnabled
-                                    ? 'Foreground monitoring is active.'
-                                    : 'Monitoring is stopped.',
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Trigger apps',
-                                      style: theme.textTheme.titleMedium,
-                                    ),
-                                  ),
-                                  FilledButton.icon(
-                                    onPressed: _openPicker,
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Add app'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              if (_status!.selectedApps.isEmpty)
-                                const Text('No trigger apps selected.')
-                              else
-                                ..._status!.selectedApps.map(
-                                  (app) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: SelectedAppTile(
-                                      app: app,
-                                      onRemove: () => _removeApp(app),
-                                    ),
-                                  ),
+                              Expanded(
+                                child: Text(
+                                  'Monitoring service',
+                                  style: theme.textTheme.titleMedium,
                                 ),
+                              ),
+                              Switch(
+                                value: _status!.serviceEnabled,
+                                onChanged: _changingService
+                                    ? null
+                                    : _toggleService,
+                              ),
                             ],
                           ),
-                        ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _status!.serviceEnabled
+                                ? 'Foreground monitoring is active. Open Focus Mode '
+                                      'when a trigger app is active.'
+                                : 'Monitoring is stopped.',
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Trigger apps',
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                              ),
+                              FilledButton.icon(
+                                onPressed: _openPicker,
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add app'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (_status!.selectedApps.isEmpty)
+                            const Text('No trigger apps selected.')
+                          else
+                            ..._status!.selectedApps.map(
+                              (app) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: SelectedAppTile(
+                                  app: app,
+                                  onRemove: () => _removeApp(app),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
@@ -265,20 +272,11 @@ class PermissionCard extends StatelessWidget {
       if (!status.hasUsageAccess)
         PermissionAction(
           title: 'Usage access',
-          description: 'Required to detect the app currently in the foreground.',
+          description:
+              'Required to detect the app currently in the foreground.',
           buttonText: 'Grant usage access',
           onPressed: () async {
             await bridge.openUsageAccessSettings();
-            await onChanged();
-          },
-        ),
-      if (!status.hasNotificationPolicyAccess)
-        PermissionAction(
-          title: 'Do Not Disturb access',
-          description: 'Required to enable and disable DND automatically.',
-          buttonText: 'Grant DND access',
-          onPressed: () async {
-            await bridge.openDndAccessSettings();
             await onChanged();
           },
         ),
@@ -300,14 +298,25 @@ class PermissionCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               missing.isEmpty
-                  ? 'Usage access and DND access are granted.'
-                  : 'Grant both permissions before starting the monitoring service.',
+                  ? 'Usage access is granted. Focus Mode must be toggled from Android settings.'
+                  : 'Grant usage access before starting the monitoring service.',
             ),
             const SizedBox(height: 12),
             ...missing,
             PermissionAction(
+              title: 'Focus Mode settings',
+              description:
+                  'Android does not expose a public API for apps to toggle Digital Wellbeing Focus Mode.',
+              buttonText: 'Open Focus Mode',
+              onPressed: () async {
+                await bridge.openFocusModeSettings();
+                await onChanged();
+              },
+            ),
+            PermissionAction(
               title: 'Battery optimization',
-              description: 'Recommended to reduce the chance Android stops the foreground service.',
+              description:
+                  'Recommended to reduce the chance Android stops the foreground service.',
               buttonText: 'Request exclusion',
               onPressed: () async {
                 await bridge.openBatteryOptimizationSettings();
@@ -352,10 +361,7 @@ class PermissionAction extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          OutlinedButton(
-            onPressed: onPressed,
-            child: Text(buttonText),
-          ),
+          OutlinedButton(onPressed: onPressed, child: Text(buttonText)),
         ],
       ),
     );
@@ -370,7 +376,9 @@ class StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = status.dndEnabled ? Colors.red : Colors.green;
+    final statusColor = status.focusModeSuggested
+        ? Colors.orange
+        : Colors.green;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -385,14 +393,21 @@ class StatusCard extends StatelessWidget {
               children: [
                 Chip(
                   avatar: CircleAvatar(backgroundColor: statusColor),
-                  label: Text(status.dndEnabled ? 'DND on' : 'DND off'),
+                  label: Text(
+                    status.focusModeSuggested
+                        ? 'Focus Mode recommended'
+                        : 'No trigger active',
+                  ),
                 ),
                 Chip(
                   label: Text(
-                    status.serviceEnabled ? 'Service enabled' : 'Service disabled',
+                    status.serviceEnabled
+                        ? 'Service enabled'
+                        : 'Service disabled',
                   ),
                 ),
-                if (status.pausedReason != null && status.pausedReason!.isNotEmpty)
+                if (status.pausedReason != null &&
+                    status.pausedReason!.isNotEmpty)
                   Chip(
                     avatar: const Icon(Icons.warning_amber_rounded, size: 18),
                     label: Text(status.pausedReason!),
@@ -403,9 +418,11 @@ class StatusCard extends StatelessWidget {
             Text('Foreground app: ${status.foregroundAppName ?? 'Unknown'}'),
             const SizedBox(height: 4),
             Text('Package: ${status.foregroundPackageName ?? 'Unavailable'}'),
-            if (status.dndEnabledByUs) ...[
+            if (status.focusModeSuggested) ...[
               const SizedBox(height: 4),
-              const Text('Auto DND currently owns the DND state.'),
+              const Text(
+                'Open Focus Mode from Android settings to pause distracting apps.',
+              ),
             ],
           ],
         ),
@@ -415,11 +432,7 @@ class StatusCard extends StatelessWidget {
 }
 
 class SelectedAppTile extends StatelessWidget {
-  const SelectedAppTile({
-    super.key,
-    required this.app,
-    required this.onRemove,
-  });
+  const SelectedAppTile({super.key, required this.app, required this.onRemove});
 
   final InstalledApp app;
   final VoidCallback onRemove;
@@ -560,9 +573,7 @@ class AppIcon extends StatelessWidget {
       return const CircleAvatar(child: Icon(Icons.apps));
     }
 
-    return CircleAvatar(
-      backgroundImage: MemoryImage(bytes!),
-    );
+    return CircleAvatar(backgroundImage: MemoryImage(bytes!));
   }
 }
 
@@ -589,10 +600,9 @@ class InstalledApp {
 class AppStatus {
   const AppStatus({
     required this.hasUsageAccess,
-    required this.hasNotificationPolicyAccess,
+    required this.hasFocusModeShortcut,
     required this.serviceEnabled,
-    required this.dndEnabled,
-    required this.dndEnabledByUs,
+    required this.focusModeSuggested,
     required this.selectedApps,
     required this.foregroundPackageName,
     required this.foregroundAppName,
@@ -600,10 +610,9 @@ class AppStatus {
   });
 
   final bool hasUsageAccess;
-  final bool hasNotificationPolicyAccess;
+  final bool hasFocusModeShortcut;
   final bool serviceEnabled;
-  final bool dndEnabled;
-  final bool dndEnabledByUs;
+  final bool focusModeSuggested;
   final List<InstalledApp> selectedApps;
   final String? foregroundPackageName;
   final String? foregroundAppName;
@@ -612,11 +621,9 @@ class AppStatus {
   factory AppStatus.fromMap(Map<Object?, Object?> map) {
     return AppStatus(
       hasUsageAccess: map['hasUsageAccess'] as bool? ?? false,
-      hasNotificationPolicyAccess:
-          map['hasNotificationPolicyAccess'] as bool? ?? false,
+      hasFocusModeShortcut: map['hasFocusModeShortcut'] as bool? ?? false,
       serviceEnabled: map['serviceEnabled'] as bool? ?? false,
-      dndEnabled: map['dndEnabled'] as bool? ?? false,
-      dndEnabledByUs: map['dndEnabledByUs'] as bool? ?? false,
+      focusModeSuggested: map['focusModeSuggested'] as bool? ?? false,
       selectedApps: ((map['selectedApps'] as List<Object?>?) ?? const [])
           .whereType<Map<Object?, Object?>>()
           .map(InstalledApp.fromMap)
@@ -668,8 +675,8 @@ class NativeBridge {
     return _channel.invokeMethod('openUsageAccessSettings');
   }
 
-  Future<void> openDndAccessSettings() {
-    return _channel.invokeMethod('openDndAccessSettings');
+  Future<void> openFocusModeSettings() {
+    return _channel.invokeMethod('openFocusModeSettings');
   }
 
   Future<void> openBatteryOptimizationSettings() {

@@ -19,17 +19,16 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 val prefsManager = PrefsManager(this)
                 val appRepository = AppRepository(this)
-                val dndManager = DndManager(this)
+                val focusModeManager = FocusModeManager(this)
 
                 when (call.method) {
                     "getStatus" -> {
                         result.success(
                             mapOf(
                                 "hasUsageAccess" to PermissionUtils.hasUsageAccess(this),
-                                "hasNotificationPolicyAccess" to PermissionUtils.hasNotificationPolicyAccess(this),
+                                "hasFocusModeShortcut" to true,
                                 "serviceEnabled" to prefsManager.isServiceEnabled(),
-                                "dndEnabled" to dndManager.isDndEnabled(),
-                                "dndEnabledByUs" to prefsManager.isDndEnabledByUs(),
+                                "focusModeSuggested" to prefsManager.isFocusModeSuggested(),
                                 "selectedApps" to sanitizeSelectedApps(prefsManager, appRepository),
                                 "foregroundPackageName" to prefsManager.getLastForegroundPackage(),
                                 "foregroundAppName" to prefsManager.getLastForegroundPackage()
@@ -60,12 +59,10 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "startMonitoring" -> {
-                        if (!PermissionUtils.hasUsageAccess(this) ||
-                            !PermissionUtils.hasNotificationPolicyAccess(this)
-                        ) {
+                        if (!PermissionUtils.hasUsageAccess(this)) {
                             result.error(
                                 "permissions_missing",
-                                "Usage access and DND access are required.",
+                                "Usage access is required.",
                                 null,
                             )
                         } else {
@@ -77,12 +74,7 @@ class MainActivity : FlutterActivity() {
 
                     "stopMonitoring" -> {
                         prefsManager.setServiceEnabled(false)
-                        if (prefsManager.isDndEnabledByUs() &&
-                            PermissionUtils.hasNotificationPolicyAccess(this)
-                        ) {
-                            dndManager.disableDnd()
-                            prefsManager.setDndEnabledByUs(false)
-                        }
+                        prefsManager.setFocusModeSuggested(false)
                         MonitorService.stopService(this)
                         result.success(null)
                     }
@@ -92,8 +84,8 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
-                    "openDndAccessSettings" -> {
-                        startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                    "openFocusModeSettings" -> {
+                        focusModeManager.openFocusModeSettings(this)
                         result.success(null)
                     }
 
